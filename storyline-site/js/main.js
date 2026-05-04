@@ -36,6 +36,14 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(PAPER, 1);
 app.appendChild(renderer.domElement);
 
+// Max anisotropy the GPU supports — typically 16. Without this,
+// textures on panels viewed at oblique angles (the ones that hug
+// the left/right edges of a wide viewport) get sampled along their
+// foreshortened axis with too few taps, producing horizontal motion-
+// blur-style streaks. Anisotropic filtering takes more samples along
+// that axis and the streaks disappear.
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(PAPER);
 
@@ -204,7 +212,7 @@ function applyCoverImage(material, url, panelAspect) {
     material.needsUpdate = true;
   });
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = MAX_ANISO;
 }
 
 function makePanel(yawDeg, pitchDeg, wDeg, hDeg, url) {

@@ -155,10 +155,22 @@ export const FilmShader = {
       float sl = sin(vUv.y * resolution.y * 1.6) * 0.5 + 0.5;
       col *= 1.0 - scanlineAmount * sl;
 
-      // 6. vignette — extra darkness at corners on top of fisheye fall-off
+      // 6. vignette — anisotropic so the left/right edges fade to the
+      // matte-black background more aggressively than the top/bottom.
+      // On wide landscape viewports the rendered scene includes panels
+      // at extreme oblique angles near the horizontal edges, where they
+      // shrink to slivers and can leave residual streaking even after
+      // anisotropic texture filtering. Fading the outer ~10% of the
+      // horizontal range to near-black masks any remainder cleanly.
       vec2 vc = vUv - 0.5;
-      float vd = dot(vc, vc);
+      float vd = dot(vec2(vc.x * 1.6, vc.y), vec2(vc.x * 1.6, vc.y));
       col *= 1.0 - vignetteAmount * smoothstep(0.18, 0.78, vd);
+
+      // Hard horizontal edge mask: takes the last few % of the screen
+      // all the way to black so any sliver-sampling artefacts at the
+      // very edges blend into the page background.
+      float edge = smoothstep(0.42, 0.5, abs(vUv.x - 0.5));
+      col *= 1.0 - edge;
 
       gl_FragColor = vec4(col, 1.0);
     }
