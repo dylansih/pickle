@@ -27,7 +27,7 @@ import { FisheyeShader, FilmShader } from './postfx.js';
 /* 1. renderer / scene / camera                                    */
 /* -------------------------------------------------------------- */
 
-const PAPER = 0xece4d2;
+const PAPER = 0x0a0a0a;
 
 const app = document.getElementById('app');
 
@@ -39,11 +39,17 @@ app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(PAPER);
 
+// Vertical FOV chosen so the middle row plus the inner half of each
+// neighbouring row is visible at rest. Top/bottom row centres sit at
+// ±26° pitch (see ROWS below); 56° vertical FOV reaches ±28° so we
+// just clip into those rows. The user pans to discover the rest.
+// A narrower FOV also keeps panels off the extreme oblique angles
+// that previously stretched into thin slivers at the screen edges.
 const camera = new THREE.PerspectiveCamera(
-  92,                                  // wide FOV so the rendered scene fills
-  window.innerWidth / window.innerHeight,   // the entire framebuffer; the
-  0.1,                                 // fisheye shader then bows it outward
-  4000,                                // without leaving paper-bg margins.
+  56,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  4000,
 );
 camera.position.set(0, 0, 0);
 camera.rotation.order = 'YXZ';         // yaw, then pitch — no roll
@@ -252,7 +258,7 @@ scene.add(panelGroup);
   const skin = new THREE.Mesh(
     new THREE.SphereGeometry(RADIUS * 1.6, 64, 48),
     new THREE.MeshBasicMaterial({
-      color: 0xd9cfb6,
+      color: 0x141414,
       side:  THREE.BackSide,
     }),
   );

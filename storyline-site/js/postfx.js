@@ -21,9 +21,9 @@ import * as THREE from 'three';
 export const FisheyeShader = {
   uniforms: {
     tDiffuse:   { value: null },
-    strength:   { value: 0.55 },                   // barrel amount
+    strength:   { value: 0.10 },                   // pincushion amount
     chroma:     { value: 0.006 },                  // RGB split at edge
-    bgColor:    { value: new THREE.Color(0xece4d2) },
+    bgColor:    { value: new THREE.Color(0x0a0a0a) },
     resolution: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: /* glsl */ `
@@ -41,27 +41,34 @@ export const FisheyeShader = {
     uniform vec2  resolution;
     varying vec2  vUv;
 
-    // Barrel distortion centered at (0.5, 0.5).
+    // Pincushion distortion centered at (0.5, 0.5).
     //
-    // The result is renormalized so the screen corner maps exactly to
-    // the source corner, while the middle of each edge is pushed out
-    // toward the corner — so straight lines bow outward (the fisheye
-    // look) and the rendered scene covers the entire viewport, with
-    // no empty paper-coloured margins.
+    // After normalising screen position to the unit square
+    // [-1, 1]², the per-pixel scale is
+    //   scale = 1 + k * (1 - x²) * (1 - y²)
+    // which is exactly 1 anywhere x² = 1 OR y² = 1 — i.e. on the
+    // entire rectangular boundary, not just the four corners. So
+    // every screen edge maps to the matching source edge, the
+    // rendered scene fully covers the viewport, and there is no
+    // streaking from out-of-bounds samples being clamped to the
+    // source border.
+    //
+    // In the interior the scale is greater than 1, so screen
+    // mid-points sample from farther out in the source — straight
+    // lines bow inward toward the centre, giving the look of being
+    // inside a sphere where the point straight ahead is the far
+    // side of the dome.
     vec2 barrel(vec2 uv, float k) {
       float aspect = resolution.x / resolution.y;
       vec2 p = uv - 0.5;
-      p.x *= aspect;
 
-      float r2   = dot(p, p);
-      float f    = 1.0 + r2 * (k + k * r2);
+      // normalise to the unit square: pn.x in [-1, 1] across width,
+      // pn.y in [-1, 1] across height, regardless of aspect ratio.
+      vec2 pn = vec2(p.x * 2.0 / aspect, p.y * 2.0);
 
-      // f at the screen corner: rMax² = (aspect/2)² + (1/2)²
-      float rMax2 = 0.25 * (aspect * aspect + 1.0);
-      float fMax  = 1.0 + rMax2 * (k + k * rMax2);
+      float scale = 1.0 + k * (1.0 - pn.x * pn.x) * (1.0 - pn.y * pn.y);
+      p *= scale;
 
-      p *= f / fMax;
-      p.x /= aspect;
       return p + 0.5;
     }
 
