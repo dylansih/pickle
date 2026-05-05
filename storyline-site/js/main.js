@@ -130,38 +130,118 @@ function buildLayout() {
 
 const PANEL_LAYOUT = buildLayout();
 
-// Builds a rounded-rectangle Shape centred at (0, 0). Used as the
-// outline for ShapeGeometry so panels have softly rounded corners
-// instead of the hard 90° angles of THREE.PlaneGeometry.
-function roundedRectShape(w, h, r) {
-  r = Math.min(r, w / 2, h / 2);
-  const s = new THREE.Shape();
-  s.moveTo(-w / 2 + r, -h / 2);
-  s.lineTo( w / 2 - r, -h / 2);
-  s.quadraticCurveTo( w / 2, -h / 2,  w / 2, -h / 2 + r);
-  s.lineTo( w / 2,  h / 2 - r);
-  s.quadraticCurveTo( w / 2,  h / 2,  w / 2 - r,  h / 2);
-  s.lineTo(-w / 2 + r,  h / 2);
-  s.quadraticCurveTo(-w / 2,  h / 2, -w / 2,  h / 2 - r);
-  s.lineTo(-w / 2, -h / 2 + r);
-  s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
-  return s;
+/* Curved-panel geometry.
+
+   Earlier each panel was a flat ShapeGeometry rounded rectangle
+   that we tilted to face the origin. That made the cylinder of
+   panels read as a faceted polygon — neighbours met at visible
+   chord angles, especially along the top and bottom edges where
+   the silhouette of the row stair-stepped.
+
+   Now every panel is a tessellated strip that physically curves
+   along the same cylinder of radius R that the panels live on.
+   In the panel's local frame the cylinder axis sits at
+   (0, *, R) — i.e. R units in front of the flat rectangle. We
+   bend each vertex around that axis:
+
+     φ      = x / R              (arc parameter along cylinder)
+     bent_x = R · sin(φ)
+     bent_z = R · (1 − cos(φ))
+
+   so the two side edges of one panel lie on the same cylindrical
+   arc as the matching side of its neighbour. Tangents agree at
+   the seam → no visible angle break. Spacing along the cylinder
+   stays uniform because we still walk arc length when laying out
+   panels (see buildLayout).
+
+   Rectangular grid + alpha mask gives us the rounded-corner look
+   without having to triangulate a rounded-rect outline (which
+   would leave the interior un-tessellated and unable to bend
+   smoothly). NX is high enough that within a single panel the
+   bend looks continuous; NY can stay tiny because the panel is
+   not curved vertically. */
+const PANEL_NX = 24;
+const PANEL_NY = 2;
+
+function buildCurvedPanelGeometry(w, h, R) {
+  const nx = PANEL_NX;
+  const ny = PANEL_NY;
+  const vCount = (nx + 1) * (ny + 1);
+  const positions = new Float32Array(vCount * 3);
+  const uvs       = new Float32Array(vCount * 2);
+
+  for (let j = 0; j <= ny; j++) {
+    const v = j / ny;
+    const y = (v - 0.5) * h;
+    for (let i = 0; i <= nx; i++) {
+      const u = i / nx;
+      const x = (u - 0.5) * w;
+
+      const phi = x / R;
+      const bx = R * Math.sin(phi);
+      const bz = R * (1 - Math.cos(phi));
+
+      const k = (j * (nx + 1) + i) * 3;
+      positions[k]     = bx;
+      positions[k + 1] = y;
+      positions[k + 2] = bz;
+
+      const uk = (j * (nx + 1) + i) * 2;
+      uvs[uk]     = u;
+      uvs[uk + 1] = v;
+    }
+  }
+
+  const indices = [];
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i;
+      const b = a + 1;
+      const c = a + (nx + 1);
+      const d = c + 1;
+      indices.push(a, b, d, a, d, c);
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('uv',       new THREE.BufferAttribute(uvs, 2));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  return geom;
 }
 
-// Wraps ShapeGeometry and remaps UVs from raw vertex coordinates
-// (the three.js default for ShapeGeometry) to a clean [0, 1]² that
-// matches the panel's bounding rectangle. Without this, textures
-// would tile based on world units instead of fitting the panel.
-function buildPanelGeometry(w, h, r) {
-  const geom = new THREE.ShapeGeometry(roundedRectShape(w, h, r), 8);
-  const pos  = geom.attributes.position;
-  const uvs  = new Float32Array(pos.count * 2);
-  for (let i = 0; i < pos.count; i++) {
-    uvs[i * 2]     = (pos.getX(i) + w / 2) / w;
-    uvs[i * 2 + 1] = (pos.getY(i) + h / 2) / h;
-  }
-  geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  return geom;
+/* Per-panel canvas alpha mask: white rounded rectangle on transparent.
+   Sized to match the panel's aspect so the corner curves stay circular
+   instead of stretching into ellipses. */
+function buildRoundedAlphaTexture(w, h, r) {
+  const LONG = 256;
+  const cw = w >= h ? LONG : Math.round(LONG * (w / h));
+  const ch = h >  w ? LONG : Math.round(LONG * (h / w));
+  const canvas = document.createElement('canvas');
+  canvas.width  = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  const pr = r * (cw / w);                      // world radius → px
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(pr, 0);
+  ctx.lineTo(cw - pr, 0);
+  ctx.quadraticCurveTo(cw, 0, cw, pr);
+  ctx.lineTo(cw, ch - pr);
+  ctx.quadraticCurveTo(cw, ch, cw - pr, ch);
+  ctx.lineTo(pr, ch);
+  ctx.quadraticCurveTo(0, ch, 0, ch - pr);
+  ctx.lineTo(0, pr);
+  ctx.quadraticCurveTo(0, 0, pr, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
 }
 
 // Image list — every panel pulls one of these and cycles through.
@@ -242,28 +322,35 @@ function makePanel(yawDeg, y, w, h, url) {
 
   // ~5% of the smaller side as the corner radius
   const r = Math.min(w, h) * 0.05;
-  const geom = buildPanelGeometry(w, h, r);
+
+  const geom = buildCurvedPanelGeometry(w, h, RADIUS);
 
   // material starts dark (so unloaded panels match the placeholder
   // look). applyCoverImage swaps map + color when the texture lands.
+  // alphaTest 0.5 turns the rounded-rect mask into a clean cutout —
+  // no transparency-sort artefacts against the cylinder skin behind.
   const mat = new THREE.MeshBasicMaterial({
-    color: 0x1a1610,
-    side:  THREE.DoubleSide,
+    color:        0x1a1610,
+    side:         THREE.DoubleSide,
+    alphaMap:     buildRoundedAlphaTexture(w, h, r),
+    transparent:  true,
+    alphaTest:    0.5,
   });
   if (url) applyCoverImage(mat, url, w / h);
 
   const mesh = new THREE.Mesh(geom, mat);
 
   // place on a vertical cylinder of radius RADIUS — the Y position
-  // comes straight from the row, no pitch math.
+  // comes straight from the row, no pitch math. The panel's curved
+  // local geometry was built around a bend axis at local (0, 0, R),
+  // which after lookAt(origin) lines up exactly with the world Y
+  // axis at this row's height — so the panel's left/right edges sit
+  // on the same cylinder its neighbours sit on, with no chord break.
   mesh.position.set(
      RADIUS * Math.sin(yaw),
      y,
     -RADIUS * Math.cos(yaw),
   );
-  // face the central vertical axis at the same height: rotates only
-  // around world Y, so the panel stays upright and adjacent panels
-  // in the row share a perfectly aligned top and bottom edge.
   mesh.lookAt(0, y, 0);
 
   return mesh;
@@ -413,7 +500,12 @@ function addTerminalSign() {
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
+  // Curved like the photo panels so the back of the dome reads as
+  // one continuous surface, not a flat sign on a curved wall.
+  const mesh = new THREE.Mesh(
+    buildCurvedPanelGeometry(planeW, planeH, RADIUS),
+    mat,
+  );
 
   // sit on the same cylinder as the photo panels, yaw 180° (behind),
   // y 0 (centred vertically), facing the camera at the origin
@@ -435,7 +527,7 @@ function addTerminalSign() {
       // resize the plane in case the title's measured width shifted
       const newH = planeW * (rebuilt.canvasH / rebuilt.canvasW);
       mesh.geometry.dispose();
-      mesh.geometry = new THREE.PlaneGeometry(planeW, newH);
+      mesh.geometry = buildCurvedPanelGeometry(planeW, newH, RADIUS);
     });
   }
 }
