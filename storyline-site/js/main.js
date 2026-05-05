@@ -464,9 +464,12 @@ addTerminalSign();
 /* 4. pointer-drag camera rotation                                */
 /* -------------------------------------------------------------- */
 
+// Start the camera facing the terminal sign on the back of the
+// cylinder (yaw 180°), so the title + paragraphs are the first thing
+// the visitor sees. Dragging then walks them around to the photos.
 const state = {
-  yaw: 0, pitch: 0,                    // current rotation
-  targetYaw: 0, targetPitch: 0,        // where the mouse wants us to be
+  yaw: Math.PI, pitch: 0,                    // current rotation
+  targetYaw: Math.PI, targetPitch: 0,        // where the mouse wants us to be
   dragging: false,
   lastX: 0, lastY: 0,
 };
