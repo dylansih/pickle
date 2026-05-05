@@ -3,8 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Storyline</title>
+  <title>The Lucidity Terminal</title>
   <link rel="stylesheet" href="css/style.css" />
+
+  <!--
+    Neue Television is the intended display face. It's commercial, so
+    visitors who don't have it installed locally fall through to Anton
+    (Google Fonts) — a tall condensed display sans with the same retro
+    editorial feel.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
 
   <!--
     Three.js is loaded from the unpkg CDN via an import map so the project
@@ -30,6 +40,6 @@
 
   <!-- ?v= query param: bump whenever js/main.js or js/postfx.js change so
        browsers (and GitHub Pages' CDN) refetch instead of running stale code. -->
-  <script type="module" src="js/main.js?v=2"></script>
+  <script type="module" src="js/main.js?v=4"></script>
 </body>
 </html>

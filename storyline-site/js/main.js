@@ -96,17 +96,17 @@ const RADIUS = 480;                    // distance from camera to panel face
 const HGAP = 14;
 
 const ROWS = [
-  // top — wider rectangles, hero scale
-  { y:  240, h: 160, ws: [180, 130, 220, 160, 200, 140, 190, 170, 210] },
+  // top — wider rectangles, hero scale (10 panels)
+  { y:  240, h: 160, ws: [180, 130, 220, 160, 200, 175, 140, 190, 170, 210] },
 
-  // upper middle — shorter, denser
-  { y:   72, h: 120, ws: [220, 160, 280, 200, 160, 240, 180, 220] },
+  // upper middle — shorter, denser (9 panels)
+  { y:   72, h: 120, ws: [220, 160, 280, 200, 200, 160, 240, 180, 220] },
 
-  // lower middle — shorter, denser
-  { y:  -72, h: 120, ws: [200, 240, 160, 220, 180, 260, 140, 200] },
+  // lower middle — shorter, denser (9 panels)
+  { y:  -72, h: 120, ws: [200, 240, 160, 220, 180, 260, 230, 140, 200] },
 
-  // bottom — mirrors the top in scale
-  { y: -240, h: 160, ws: [180, 220, 150, 200, 170, 220, 140, 200, 190] },
+  // bottom — mirrors the top in scale (10 panels)
+  { y: -240, h: 160, ws: [180, 220, 150, 200, 175, 170, 220, 140, 200, 190] },
 ];
 
 function buildLayout() {
@@ -202,6 +202,10 @@ const IMAGES = [
   'media/IMG_0149.jpg',
   'media/IMG_9609.jpg',
   'media/IMG_0110.jpg',
+  'media/IMG_5012.jpg',
+  'media/IMG_5013.jpg',
+  'media/IMG_5014.jpg',
+  'media/IMG_5015.jpg',
 ];
 
 const textureLoader = new THREE.TextureLoader();
@@ -271,6 +275,171 @@ PANEL_LAYOUT.forEach((p, i) => {
   panelGroup.add(makePanel(...p, url));
 });
 scene.add(panelGroup);
+
+/* -------------------------------------------------------------- */
+/* 2b. Lucidity Terminal — diegetic text plane                     */
+/* -------------------------------------------------------------- */
+
+/* The text used to live as a fixed HTML overlay. That meant it
+   sat on top of the rendered canvas, never moved when the user
+   panned, and skipped the fisheye + film passes. Now it lives
+   inside the scene as a textured plane: it pans with the world,
+   barrel-distorts at the screen edges, and picks up the same
+   sepia/grain/scanlines as everything else.
+
+   The plane sits on the same cylinder as the photo panels but at
+   yaw 180° — the back of the dome — where the rows leave a wide
+   empty arc. The user discovers it by dragging to look behind. */
+
+function buildTerminalCanvas() {
+  // Canvas is laid out around the natural width of the title at
+  // a chosen font size; every body line then wraps to that exact
+  // pixel width. So as long as the title fits, every other line
+  // is guaranteed to stay within the title's measured width — the
+  // user-flagged "long sentences spilling past the headline" can't
+  // happen by construction.
+  const TITLE     = 'THE LUCIDITY TERMINAL';
+  const PARAGRAPHS = [
+    'Life review. The phenomenon where your lives flash before your eyes, your mind replaying significant emotional events and memories. But why wait. Why wait until the end, when it’s too late to share it all with the world.',
+    'So much to learn, so much to feel, so many stories, so many lives lived in one. This is a peak into my life, my stories, my people and the places I’ve been.',
+  ];
+  const WELCOME = 'Welcome to my terminal.';
+
+  const TITLE_FONT = '600 132px "Neue Television", "Anton", "Bebas Neue", sans-serif';
+  const BODY_FONT  = '32px "Times New Roman", Georgia, serif';
+  const WELCOME_FONT = 'italic 34px "Times New Roman", Georgia, serif';
+
+  // first pass: measure title to size the canvas
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = TITLE_FONT;
+  const titleW = probe.measureText(TITLE).width;
+
+  const PAD_X = 40;
+  const PAD_Y = 40;
+  const TITLE_BODY_GAP = 36;
+  const PARA_GAP = 22;
+  const LINE_H = 44;
+  const WRAP_W = titleW;                          // body lines wrap to title width
+
+  // measure body height by simulating wrap
+  function wrapLines(text, font) {
+    probe.font = font;
+    const words = text.split(/\s+/);
+    const lines = [];
+    let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (probe.measureText(test).width > WRAP_W) {
+        if (line) lines.push(line);
+        line = w;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  const bodyBlocks = PARAGRAPHS.map(p => wrapLines(p, BODY_FONT));
+  const welcomeLines = wrapLines(WELCOME, WELCOME_FONT);
+
+  let bodyH = 0;
+  for (const block of bodyBlocks) bodyH += block.length * LINE_H + PARA_GAP;
+  bodyH += LINE_H * welcomeLines.length;          // welcome trailing block
+  bodyH += PARA_GAP * 1.4;                         // extra breathing room before welcome
+
+  const canvasW = Math.ceil(titleW + PAD_X * 2);
+  const canvasH = Math.ceil(PAD_Y * 2 + 132 + TITLE_BODY_GAP + bodyH);
+
+  // upscale for crispness; the GPU will downsample when texturing
+  const DPR = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width  = canvasW * DPR;
+  canvas.height = canvasH * DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  // soft halo so the text reads if anything ever ends up behind it
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+  ctx.shadowBlur  = 14;
+  ctx.fillStyle   = '#e8e4dc';
+  ctx.textAlign   = 'center';
+  ctx.textBaseline = 'top';
+
+  // title
+  ctx.font = TITLE_FONT;
+  let y = PAD_Y;
+  ctx.fillText(TITLE, canvasW / 2, y);
+  y += 132 + TITLE_BODY_GAP;
+
+  // body paragraphs
+  ctx.font = BODY_FONT;
+  for (const block of bodyBlocks) {
+    for (const line of block) {
+      ctx.fillText(line, canvasW / 2, y);
+      y += LINE_H;
+    }
+    y += PARA_GAP;
+  }
+
+  // welcome (italic, slight extra gap)
+  y += PARA_GAP * 0.4;
+  ctx.font = WELCOME_FONT;
+  for (const line of welcomeLines) {
+    ctx.fillText(line, canvasW / 2, y);
+    y += LINE_H;
+  }
+
+  return { canvas, canvasW, canvasH };
+}
+
+function addTerminalSign() {
+  const { canvas, canvasW, canvasH } = buildTerminalCanvas();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = MAX_ANISO;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+
+  // world size — keep the plane comparable to a hero panel while
+  // matching the canvas aspect ratio, so the bitmap is never stretched
+  const planeW = 520;
+  const planeH = planeW * (canvasH / canvasW);
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
+
+  // sit on the same cylinder as the photo panels, yaw 180° (behind),
+  // y 0 (centred vertically), facing the camera at the origin
+  const yaw = Math.PI;
+  mesh.position.set(
+     RADIUS * Math.sin(yaw),
+     0,
+    -RADIUS * Math.cos(yaw),
+  );
+  mesh.lookAt(0, 0, 0);
+  scene.add(mesh);
+
+  // rebuild once webfonts arrive, in case the first paint used a fallback
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      const rebuilt = buildTerminalCanvas();
+      mat.map.image = rebuilt.canvas;
+      mat.map.needsUpdate = true;
+      // resize the plane in case the title's measured width shifted
+      const newH = planeW * (rebuilt.canvasH / rebuilt.canvasW);
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.PlaneGeometry(planeW, newH);
+    });
+  }
+}
+addTerminalSign();
 
 /* -------------------------------------------------------------- */
 /* 3. faint sphere skin behind the panels                         */

@@ -50,3 +50,47 @@ body.dragging { cursor: grabbing; }
   pointer-events: none;
   opacity: 0.7;
 }
+
+/* The Lucidity Terminal — fixed overlay. Photos pan behind the text
+   while the text stays put, mimicking a CRT readout sitting on top of
+   the rotating "memory dome". pointer-events: none so the underlying
+   canvas still receives drag events. */
+.terminal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(620px, 78vw);
+  z-index: 60;
+  pointer-events: none;
+  text-align: center;
+  color: var(--ink);
+  font-family: "Neue Television", "TT Neue Television", "Anton",
+               "Bebas Neue", "Times New Roman", serif;
+  /* soft halo so the text always reads on top of bright photos */
+  text-shadow:
+    0 0 16px rgba(0, 0, 0, 0.85),
+    0 0 4px  rgba(0, 0, 0, 0.9);
+}
+
+.terminal h1 {
+  font-weight: normal;
+  font-size: clamp(2.4rem, 6.4vw, 4.8rem);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 1.4rem;
+}
+
+.terminal p {
+  font-size: clamp(0.95rem, 1.25vw, 1.05rem);
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.9rem;
+}
+
+.terminal__welcome {
+  margin-top: 1.6rem;
+  font-style: italic;
+  letter-spacing: 0.06em;
+}
