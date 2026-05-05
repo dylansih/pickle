@@ -403,7 +403,7 @@ function buildTerminalCanvas() {
 
   const PAD_X = 40;
   const PAD_Y = 40;
-  const TITLE_BODY_GAP = 36;
+  const TITLE_BODY_GAP = 90;
   const PARA_GAP = 22;
   const LINE_H = 44;
   const WRAP_W = titleW;                          // body lines wrap to title width
